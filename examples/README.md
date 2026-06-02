@@ -47,13 +47,12 @@ Build outputs are placed under `build/<example-name>/`.
 
 ## Available Examples
 
-| Example | Package | Description | Enabled by default |
+| Example | Package | Description |
 |---|---|---|---|
-| `hello` | `hello.vela` | Minimal enclave that enters and returns | Yes |
-| `attestation` | `attestor.vela` | Remote attestation with SM verification | No |
-| `ros` | `ros.vela` | Two enclaves communicating via shared memory | No |
+| `hello` | `hello.vela` | Minimal enclave that enters and returns |
+| `attestation` | `attestor.vela` | Remote attestation with SM verification |
+| `ros` | `ros.vela` | Two enclaves communicating via shared memory |
 
-To enable additional examples, uncomment the corresponding `add_subdirectory(...)` lines in [CMakeLists.txt](CMakeLists.txt).
 
 ## Running
 
