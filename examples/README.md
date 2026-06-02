@@ -48,7 +48,7 @@ Build outputs are placed under `build/<example-name>/`.
 ## Available Examples
 
 | Example | Package | Description |
-|---|---|---|---|
+|---|---|---|
 | `hello` | `hello.vela` | Minimal enclave that enters and returns |
 | `attestation` | `attestor.vela` | Remote attestation with SM verification |
 | `ros` | `ros.vela` | Two enclaves communicating via shared memory |
