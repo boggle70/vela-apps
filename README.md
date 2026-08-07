@@ -6,7 +6,7 @@ emulation platform. Two subsystems live here:
 
 | Subsystem | Contents |
 |-----------|----------|
-| **TEE** (Keystone) | Host-side SDK, in-enclave Eyrie runtime, and example enclave applications |
+| **TEE** (Keystone) | Host-side SDK, in-enclave Eyrie runtime, and example enclave applications. Enclave isolation is enforced with **RISC-V WorldGuard** instead of Keystone's original PMP-based scheme. |
 | **RAS** (RERI) | RERI register specification tool |
 
 Related repositories: [vela-fws](https://github.com/riscv-vela/vela-fws)
