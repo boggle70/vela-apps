@@ -1,7 +1,7 @@
 # vela-apps
 
-Application-layer components of the [Vela](https://github.com/riscv-vela/vela)
-project, running on top of the [Q-Vela](https://github.com/riscv-vela/q-vela)
+Application-layer components of the [riscv-vela](https://github.com/riscv-vela/)
+project, installed on the [Vela](https://github.com/riscv-vela/vela) and running on top of the [Q-Vela](https://github.com/riscv-vela/q-vela)
 emulation platform. Two subsystems live here:
 
 | Subsystem | Contents |
