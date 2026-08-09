@@ -7,7 +7,7 @@ emulation platform. Two subsystems live here:
 | Subsystem | Contents |
 |-----------|----------|
 | **TEE** (Keystone) | Host-side SDK, in-enclave Eyrie runtime, and example enclave applications. Enclave isolation is enforced with **RISC-V WorldGuard** instead of Keystone's original PMP-based scheme. |
-| **RAS** (RERI) | RERI register specification tool |
+| **RAS** (RERI) | rasdaemon packaging for the guest, RERI error-injection scripts, and the RERI register specification tool. |
 
 ---
 
@@ -21,6 +21,7 @@ vela-apps/
 ├── examples/                  # Example enclaves (hello, attestation, ros)
 │
 │   # RAS (RERI)
+├── ras/                       # rasdaemon packaging + RERI error-injection scripts
 └── reri register generator/   # RERI register specification tool (Excel-based)
 ```
 
@@ -96,9 +97,67 @@ insmod keystone-driver.ko      # creates /dev/keystone_enclave
 
 ---
 
-## RAS — RERI Register Generator
+## RAS — Error Injection and Collection
 
-`reri register generator/` contains the Excel-based RERI register specification
-tool.
+Two user-space tools make up the RAS workflow on a Q-Vela guest:
 
-> TODO: build and usage instructions.
+| Tool | Role | Where it comes from |
+|------|------|---------------------|
+| **rasdaemon** | Subscribes to the kernel RAS tracepoints and records the events | Built for the guest — see [`ras/README.md`](ras/README.md) |
+| **devmem** | Writes RERI registers directly to inject an error | Already in the guest — busybox built-in |
+
+### First check: mount tracefs, then look for the RAS events
+
+Nothing mounts tracefs on a minimal guest, and `/sys/kernel/tracing` is an empty
+mount point until you do. After that, `events/ras/` tells you whether the kernel
+was built with `CONFIG_RAS=y` — without it rasdaemon collects **nothing**, even
+though `dmesg` still prints `[Hardware Error]`.
+
+```bash
+mount -t tracefs nodev /sys/kernel/tracing
+ls /sys/kernel/tracing/events/ras/     # must contain non_standard_event/
+```
+
+### Smoke test — no rasdaemon needed
+
+On the buildroot `rootfs.cpio` guest, busybox already has `devmem`, and that is
+enough to prove the whole path end to end:
+
+```bash
+echo 1 > /sys/kernel/tracing/events/ras/non_standard_event/enable
+cat /sys/kernel/tracing/trace_pipe &
+
+devmem 0x4010040 32 0x2a1        # arm
+devmem 0x4010048 32 0x9001404    # describe a TLB error
+devmem 0x4010044 8 1             # fire
+```
+
+### Collecting errors — Ubuntu guest
+
+Build rasdaemon v0.8.5 from source — the distro package is too old and gives no
+guarantee of `--enable-non-standard`, which is the only event this platform
+produces. Then:
+
+```bash
+sudo rasdaemon -f -r &
+
+devmem 0x4010040 32 0x2a1          # arm
+devmem 0x4010048 32 0x11001702     # RERI error code 17, correctable
+devmem 0x4010044 8  1              # fire
+
+ras-mc-ctl --errors
+```
+
+The full walkthrough — register map, error-code table, troubleshooting, and why
+rasdaemon needs `--enable-non-standard` rather than `--enable-reri` — is in
+**[`ras/README.md`](ras/README.md)**.
+
+### RERI Register Generator
+
+`reri register generator/` holds the Excel-based tool for working out the
+register bit fields, along with
+[its own notes](reri%20register%20generator/readme.md) on `devmem` usage.
+
+> One correction to those notes: the Status register formula
+> `Error bank + 72*(i+1)` is right for record 0 only. Error records are 64 bytes
+> apart, so use `control_i + 8`. See [`ras/README.md`](ras/README.md).
