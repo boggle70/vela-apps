@@ -23,7 +23,8 @@ vela-apps/
 ├── examples/                  # Example enclaves (hello, attestation, ros)
 │
 │   # RAS (RERI)
-├── ras/                       # rasdaemon packaging + RERI error-injection scripts
+├── ras/                       # rasdaemon packaging + RERI error injection
+│   └── rasdaemon/             #   source build, CPER decoder, systemd service
 └── reri register generator/   # RERI register specification tool (Excel-based)
 ```
 
@@ -105,8 +106,13 @@ Two user-space tools make up the RAS workflow on a Q-Vela guest:
 
 | Tool | Role | Where it comes from |
 |------|------|---------------------|
-| **rasdaemon** | Subscribes to the kernel RAS tracepoints and records the events | Built for the guest — see [`ras/README.md`](ras/README.md) |
+| **rasdaemon** | Subscribes to the kernel RAS tracepoints and records the events | Built and installed as a service by [`ras/rasdaemon/`](ras/rasdaemon/) |
 | **devmem** | Writes RERI registers directly to inject an error | Already in the guest — busybox built-in |
+
+Everything below runs **inside a Q-Vela guest**, launched from `q-vela/` — the
+RAS boot needs `reri=true`, the EDK2 pflash pair, and `wg=on`, which neither
+`q-vela/run.sh` nor `vela/run.sh` passes. Artifact list and the launch command
+are in [`ras/README.md`](ras/README.md).
 
 ### First check: mount tracefs, then look for the RAS events
 
@@ -136,13 +142,17 @@ devmem 0x4010044 8 1             # fire
 
 ### Collecting errors — Ubuntu guest
 
-Build rasdaemon v0.8.5 from source — the distro package is too old and gives no
-guarantee of `--enable-non-standard`, which is the only event this platform
-produces. Then:
+```bash
+sudo ./ras/rasdaemon/install-rasdaemon.sh
+systemctl status rasdaemon
+```
+
+Builds rasdaemon v0.8.5 from source and registers it as a service, so collection
+outlives your console session. The distro package is 0.8.0-2 with no guarantee
+of `--enable-non-standard` — the only event this platform produces. The script
+also adds a CPER decoder, without which records come out as raw hex.
 
 ```bash
-sudo rasdaemon -f -r &
-
 devmem 0x4010040 32 0x2a1          # arm
 devmem 0x4010048 32 0x11001702     # RERI error code 17, correctable
 devmem 0x4010044 8  1              # fire

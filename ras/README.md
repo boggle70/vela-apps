@@ -9,24 +9,85 @@ into the emulated RERI registers, then **watch** the kernel detect it and
   inject an error   ────►   detects, reports   ────►   collects, logs
 ```
 
-Every step here is a command you can paste. Wrapper scripts
-(`build-rasdaemon.sh`, `inject/`) are being added separately — see
-[riscv-vela/vela-apps#2](https://github.com/riscv-vela/vela-apps/issues/2).
+Everything below runs **inside the guest**. Start it first.
 
 ---
 
-## Which guest do I use?
+## Boot the guest
 
-Q-Vela can boot two different guests, and they have different jobs.
+Launching is q-vela's job — the command lives in
+[q-vela `docs/ras.md`](https://github.com/riscv-vela/q-vela/blob/main/docs/ras.md)
+§3 and that stays the source of truth. This section only says what the RAS flow
+needs and where each piece comes from.
+
+### 1. What you need, and who builds it
+
+| Artifact | Repo | How |
+|---|---|---|
+| `qemu/build/qemu-system-riscv64` | [q-vela](https://github.com/riscv-vela/q-vela) | `docs/ras.md` §2.3. Check `-M virt,help \| grep reri`. |
+| `opensbi/.../fw_dynamic.bin` | [vela-fws](https://github.com/riscv-vela/vela-fws) | README — build `sm` first, then OpenSBI |
+| `Build/.../RISCV_VIRT_{CODE,VARS}.fd` | vela-fws | README — EDK2, then `truncate -s 32M` **both** |
+| `linux/arch/riscv/boot/Image` | [vela-linux](https://github.com/riscv-vela/vela-linux) | needs `CONFIG_RAS=y` — [PR #2](https://github.com/riscv-vela/vela-linux/pull/2) |
+| `buildroot/output/images/rootfs.cpio` | vela-fws | README — buildroot |
+| `ubuntu-noble-riscv64.img` | [vela](https://github.com/riscv-vela/vela) | `./init.sh` |
+
+### 2. Which guest
 
 | Guest | Good for | rasdaemon? |
 |-------|----------|------------|
-| **buildroot `rootfs.cpio`** | Quick smoke test — is the RERI path alive? | No. `devmem` and `dmesg` are enough, and busybox already ships `devmem`. |
-| **Ubuntu 24.04** | The real thing — collection, logging, ROS 2 workloads | Yes. Build it from source, below. |
+| **`rootfs.cpio`** | Smoke test — is the RERI path alive? | No, and it does not need one. busybox already ships `devmem`. |
+| **Ubuntu 24.04** | Collection, logging, ROS 2 workloads | Yes — `rasdaemon/install-rasdaemon.sh`. |
 
-If you just want to confirm the hardware path works, stay on `rootfs.cpio` and
-skip to [Smoke test](#smoke-test-no-rasdaemon-needed). If you need error records
-in a file, you want the Ubuntu guest.
+### 3. Launch, from `q-vela/`
+
+Three flags decide whether any RAS event exists at all: `reri=true` (the MMIO
+device), the EDK2 pflash pair (GHES comes from ACPI — a device-tree boot has
+none), and `fw_dynamic.bin` rather than `fw_jump.bin`. `q-vela/run.sh` and
+`vela/run.sh` have none of them and will not work here.
+
+> **`wg=on` is also required**, and `docs/ras.md` §3 does not list it. OpenSBI
+> links the Vela security monitor, which touches the WorldGuard CSR `mlwid`
+> (`0x390`) during init; without it the guest dies in M-mode before EDK2 runs:
+> `Failed to access CSR 0x390 from M-mode`, `mcause=0x2 mtval=0x39051073`.
+> The fix belongs in `docs/ras.md`, not here — raising it with q-vela.
+
+Paths below assume the repositories sit side by side.
+
+```bash
+cd q-vela
+qemu/build/qemu-system-riscv64 \
+  -nographic -accel tcg -m 4096 -smp 2 \
+  -bios ../vela-fws/opensbi/build/platform/generic/firmware/fw_dynamic.bin \
+  -blockdev node-name=pflash0,driver=file,read-only=on,filename=../vela-fws/Build/RiscVVirtQemu/RELEASE_GCC5/FV/RISCV_VIRT_CODE.fd \
+  -blockdev node-name=pflash1,driver=file,filename=../vela-fws/Build/RiscVVirtQemu/RELEASE_GCC5/FV/RISCV_VIRT_VARS.fd \
+  -M virt,pflash0=pflash0,pflash1=pflash1,wg=on,rpmi=true,reri=true,aia=aplic-imsic \
+  -netdev user,id=net0,hostfwd=tcp::2222-:22 -device virtio-net-device,netdev=net0 \
+  -kernel ../vela-linux/linux/arch/riscv/boot/Image \
+  -semihosting-config enable=on,userspace=on \
+  -initrd ../vela-fws/buildroot/output/images/rootfs.cpio \
+  -append "root=/dev/ram rw console=ttyS0 earlycon=uart8250,mmio,0x10000000"
+```
+
+For the Ubuntu guest, replace the last two lines with:
+
+```bash
+  -drive file=../vela/ubuntu-noble-riscv64.img,format=raw,if=virtio \
+  -append "root=/dev/vda1 rw console=ttyS0 earlycon=uart8250,mmio,0x10000000"
+```
+
+UEFI writes its variables back into `RISCV_VIRT_VARS.fd`. Copy it somewhere
+writable and point `pflash1` at the copy if you want the build artifact left
+alone.
+
+A healthy boot shows the chain coming up:
+
+```
+sse: SBI SSE extension detected
+GHES: Registered SSE notification on vector 32768
+EINJ: Error INJection is initialized.
+```
+
+Log in as **`root`**, no password. Quit with **Ctrl-A X**.
 
 ---
 
@@ -141,44 +202,73 @@ Note the record arrives as **undecoded raw bytes**. That is expected here — se
 
 ## Installing rasdaemon (Ubuntu guest)
 
-Build **v0.8.5 from source**. Do not use `apt install rasdaemon`: the Ubuntu
-package is 0.8.0-2, and rasdaemon decides at configure time which events it can
-handle — the distro build gives no guarantee of `--enable-non-standard`, which is
-the only event this platform produces.
-
 ```bash
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends \
-    build-essential autoconf automake libtool pkg-config git \
-    libtraceevent-dev libsqlite3-dev
-
-git clone --depth 1 --branch v0.8.5 https://github.com/mchehab/rasdaemon
-cd rasdaemon
-autoreconf -vfi
-
-# --enable-reri is deliberately left out; see "Before you start" above.
-./configure --enable-non-standard --enable-sqlite3
-
-make -j"$(nproc)"
-sudo make install
+sudo ./rasdaemon/install-rasdaemon.sh
+systemctl status rasdaemon
 ```
 
-Then start it:
+That leaves rasdaemon running as a **systemd service** — it survives your
+console session ending, restarts if it dies, and comes back after a reboot.
+TC.10.007 collects unattended for the better part of an hour, so
+`rasdaemon -f -r &` is not enough.
 
-```bash
-sudo mount -t tracefs nodev /sys/kernel/tracing   # rasdaemon needs this
-sudo rasdaemon -f -r                              # foreground, and record to disk
+Five things the script does that a plain `configure && make install` does not:
+
+| | Why |
+|---|---|
+| Builds v0.8.5 from source | The distro package is 0.8.0-2, and rasdaemon picks its events at **configure time**. |
+| `--enable-non-standard` | The only event this platform produces, and off by default. Without it the daemon starts cleanly and records nothing. |
+| Never `--enable-reri` | `ras:reri_event` does not exist in this kernel. |
+| Installs the systemd unit | Upstream generates it but has no install rule — distro packaging always did that step. |
+| Drop-in: tracefs + `Restart=always` | Nothing mounts tracefs on a minimal guest, and `Restart=on-abort` misses a clean non-zero exit. |
+
+### The decoder
+
+Our errors arrive as a CPER **Processor Generic Error Section**. `ghes_do_proc()`
+has no branch for it, so it reaches user space on `ras:non_standard_event`, and
+rasdaemon has no decoder registered for that GUID — it dumps hex.
+`rasdaemon/riscv-decoder/` registers one through the same
+`register_ns_ev_decoder()` hook the Ampere, HiSilicon, NVIDIA and Yitian
+decoders use.
+
+```
+without:  raw data:0f 02 00 00 00 00 00 00 03 06 02 01 ...
+
+with:     processor generic error:
+           processor_type: 3, RISCV
+           processor_isa: 6, RISCV64
+           error_type: 0x02 (TLB error)
+           operation: 1, data read
+           target_address: 0x0000000000000000
 ```
 
-rasdaemon finds the tracepoints by scanning `/proc/mounts`: it looks for a
-**tracefs** mount first, then falls back to a **debugfs** mount plus `/tracing`.
-If neither is mounted it exits with `Can't locate a mounted debugfs`.
+Strings come from `drivers/firmware/efi/cper.c`, so the record should read the
+same as dmesg. If they disagree, the decoder is wrong.
 
 ---
 
 ## Injecting errors
 
-Three writes, and the order matters — the third one is the trigger.
+```bash
+make -C inject                       # one file, no dependencies
+sudo ./inject/inject_cpu_ce.sh       # corrected CPU error
+sudo ./inject/inject_mem.sh -a 0x80000000
+```
+
+TC.10.007 asks for four injections twelve minutes apart:
+
+```bash
+sudo ./inject/inject_cpu_ce.sh -n 4 -i 720
+```
+
+`-N` prints the register writes without touching anything, `-v` reads the RERI
+code back afterwards, `-e CODE` picks a different error. `inject/reri-inject -h`
+lists the rest.
+
+### Or by hand
+
+An injection is three writes, and the order matters — the third one is the
+trigger.
 
 ```bash
 devmem 0x4010040 32 0x2a1          # arm the error record
@@ -186,21 +276,17 @@ devmem 0x4010048 32 0x11001702     # describe the error (table below)
 devmem 0x4010044 8  1              # fire
 ```
 
-Only the middle value changes between error types. On the Ubuntu guest `devmem`
-may only be reachable as a busybox applet — use `busybox devmem` there.
+Two reasons the scripts exist rather than this loop being the answer:
 
-Repeating on a schedule is a shell loop. The availability test in the test plan
-(TC.10.007) asks for four injections twelve minutes apart:
-
-```bash
-for i in 1 2 3 4; do
-    sleep 720
-    devmem 0x4010040 32 0x2a1
-    devmem 0x4010048 32 0x11001702
-    devmem 0x4010044 8  1
-    echo "[$(date '+%H:%M:%S')] injection $i/4"
-done
-```
+- **`devmem` is a rootfs accident.** busybox bundles it, so the buildroot guest
+  has it and Ubuntu does not. On Ubuntu it is `busybox devmem` after
+  `apt-get install busybox`, and `devmem2` spells its arguments differently
+  again. `reri-inject` opens `/dev/mem` itself and behaves the same everywhere.
+- **A dropped write looks like a successful one.** The emulator discards a
+  `status_i` write unless exactly one of `ce`/`de`/`ue` is set, and keeps the
+  old value if the previous error was never consumed. `devmem` reports success
+  either way and nothing happens when the trigger fires. `reri-inject` reads
+  the register back and refuses to fire.
 
 ### Available error types
 
@@ -351,9 +437,14 @@ test plan uses** when it says "RERI Error Code 17".
 | `ls /sys/kernel/tracing/events/ras/` → `No such file or directory` | tracefs is not mounted. `/sys/kernel/tracing` is only an empty mount point until you run `mount -t tracefs nodev /sys/kernel/tracing`. This is the usual first stumble on a minimal guest. |
 | `events/` exists but there is no `ras/` in it | Kernel built without `CONFIG_RAS`. |
 | `dmesg` shows the error but `trace_pipe` stays silent | Also `CONFIG_RAS` — the kernel log path works without it, the tracepoint does not. |
-| rasdaemon exits with `Can't locate a mounted debugfs` | Neither tracefs nor debugfs is mounted. Mount tracefs. |
-| rasdaemon runs but records nothing | Built without `--enable-non-standard`. Rebuild it, or check with `rasdaemon --version`-style output that the option was on. |
-| `devmem` writes succeed, nothing happens at all | Did you write `0x4010044` (the trigger) **last**? Did you boot with `-M virt,reri=true`? |
+| rasdaemon exits with `Can't locate a mounted debugfs` | Neither tracefs nor debugfs is mounted. The service drop-in mounts tracefs before starting; if you launched rasdaemon by hand, mount it yourself. |
+| `systemctl start rasdaemon` fails immediately | `journalctl -u rasdaemon -n 30`. Two usual causes: `/etc/sysconfig/rasdaemon` is missing (the unit's `EnvironmentFile=` has no leading dash, so a missing file is fatal), or the tracefs `ExecStartPre` failed. |
+| rasdaemon runs but records nothing | Built without `--enable-non-standard`. The install script asserts `HAVE_NON_STANDARD` in `config.h` and stops if it is absent, so this means something else built the binary. |
+| Records show `raw data:` hex instead of decoded fields | Built without the RISC-V decoder. The install script asserts `HAVE_RISCV_NS_DECODE` the same way. |
+| `devmem` writes succeed, nothing happens at all | Did you write `0x4010044` (the trigger) **last**? `reri-inject` orders them for you and reads the register back. |
+| `devmem: command not found` | On the host: these commands run **inside the guest**. In the Ubuntu guest: `apt-get install busybox`, then `busybox devmem` — or use `reri-inject`. |
+| Guest dies in M-mode with `Failed to access CSR 0x390` | Booted without `wg=on`. OpenSBI links the security monitor, which needs WorldGuard. |
+| `ras-mc-ctl` says `Can't locate DBI.pm` | `apt-get install libdbd-sqlite3-perl`. The daemon is unaffected — this only blocks reading what it collected. |
 | No `[Hardware Error]` in `dmesg` at all | The guest must boot through EDK2/ACPI. A device-tree boot produces no GHES reports. |
 
 ---
