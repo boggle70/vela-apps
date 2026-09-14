@@ -1,0 +1,257 @@
+vela-apps — Third-Party Component Notices
+==========================================
+
+vela-apps is a composite work. It combines code written for the riscv-vela
+project with a fork of the Keystone Enclave project and several vendored
+third-party libraries.
+
+Scope of the top-level LICENSE
+------------------------------
+The top-level LICENSE file (BSD-3-Clause) is the default license for this
+repository. It reflects the license of the Keystone Enclave project, from
+which sdk/, runtime/ and examples/ are derived, and it names the riscv-vela
+copyright holders for the work contributed by this project:
+
+  * Electronics and Telecommunications Research Institute (ETRI)
+  * Chungbuk National University, Computer Systems Lab
+
+Work contributed by the riscv-vela project is jointly owned by the two
+institutions above and is contributed under the license already in force for
+the tree it was added to, so that each tree remains uniformly licensed.
+
+Where a component directory carries its own license file, that file governs
+the contents of that directory and takes precedence over the top-level
+LICENSE. Per-file SPDX-License-Identifier tags, where present, are
+authoritative and take precedence over both.
+
+
+1. sdk/
+--------------------------------------------------------------------------
+Component     : Keystone SDK — host-side libraries (host, edge, verifier,
+                eapp) and CMake macros
+Upstream      : https://github.com/keystone-enclave/keystone
+Form          : Fork. Modified in place by the riscv-vela project to enforce
+                enclave isolation with RISC-V WorldGuard instead of the
+                original PMP-based scheme.
+License       : BSD-3-Clause
+License text  : sdk/LICENSE
+Copyright     : The Regents of the University of California (Regents);
+                riscv-vela contributors (see the top-level LICENSE)
+
+Notes         : Original copyright notices in modified files have been
+                retained. sdk/install/ contains build output committed to
+                the repository and duplicates files from sdk/include/ and
+                sdk/src/ along with their notices.
+
+                See sections 5 through 7 for third-party libraries vendored
+                inside this tree, which are NOT covered by sdk/LICENSE.
+
+
+2. runtime/
+--------------------------------------------------------------------------
+Component     : Eyrie — the in-enclave S-mode runtime
+Upstream      : https://github.com/keystone-enclave/keystone-runtime
+Form          : Fork. Modified in place by the riscv-vela project.
+License       : BSD-3-Clause
+License text  : runtime/LICENSE
+Copyright     : The Regents of the University of California (Regents);
+                riscv-vela contributors (see the top-level LICENSE)
+
+Notes         : Original copyright notices in modified files have been
+                retained.
+
+                See sections 4, 8 and 9 for third-party code vendored inside
+                this tree, which is NOT covered by runtime/LICENSE.
+
+
+3. examples/
+--------------------------------------------------------------------------
+Component     : Example enclave applications (hello, attestation, ros)
+Upstream      : https://github.com/keystone-enclave/keystone-demo and the
+                Keystone example applications
+Form          : Fork, with the ros example added by the riscv-vela project
+License       : BSD-3-Clause (top-level LICENSE)
+Copyright     : The Regents of the University of California (Regents);
+                riscv-vela contributors
+
+Notes         : Original copyright notices in modified files have been
+                retained.
+
+
+4. runtime/tmplib/
+--------------------------------------------------------------------------
+Component     : User-access helpers and RISC-V assembly macros taken from
+                the Linux kernel
+Upstream      : https://github.com/torvalds/linux (riscv-linux)
+Form          : Vendored copy, inherited from upstream Keystone. See
+                runtime/tmplib/README for the file-by-file provenance.
+License       : GPL-2.0-only
+                (runtime/tmplib/linux/const.h carries
+                 GPL-2.0 WITH Linux-syscall-note)
+Copyright     : Copyright (C) 2015 Regents of the University of California,
+                as stated in the file headers of the Linux RISC-V port
+
+Notes         : *** This directory is GPL-licensed code inside an otherwise
+                BSD-3-Clause tree. uaccess.S is compiled into the rt_tmplib
+                library and linked into the Eyrie runtime binary (see
+                runtime/tmplib/CMakeLists.txt and runtime/sys/CMakeLists.txt).
+                The effective license of a built Eyrie binary is therefore
+                GPL-2.0-only, not BSD-3-Clause. *** BSD-3-Clause is
+                GPL-compatible, so the combination is permitted; what it is
+                not is BSD-licensed. Anyone redistributing a built Eyrie
+                binary must comply with GPL-2.0, including the obligation to
+                make the corresponding source available.
+
+                The arrangement is inherited from upstream Keystone and was
+                not introduced by the riscv-vela project. It does not affect
+                sdk/ or examples/, which are separate programs and remain
+                BSD-3-Clause.
+
+                This directory is NOT covered by runtime/LICENSE or the
+                top-level LICENSE.
+
+
+5. sdk/src/verifier/ed25519/ and sdk/include/verifier/ed25519/
+--------------------------------------------------------------------------
+Component     : ed25519 signature implementation
+Upstream      : https://github.com/orlp/ed25519
+Form          : Vendored copy, inherited from upstream Keystone
+License       : Zlib
+License text  : sdk/src/verifier/ed25519/license.txt
+Copyright     : Copyright (c) 2015 Orson Peters <orsonpeters@gmail.com>
+
+Notes         : The upstream license text was not retained when this library
+                was vendored into Keystone. It has been recovered from
+                upstream and restored at the path above, as required by
+                clause 3 of the Zlib license.
+
+                The files as vendored here are substantively altered: the
+                hash function was changed from SHA-512 to SHA-3, so the
+                signatures are not interoperable with upstream ed25519 or
+                RFC 8032. Per clause 2 of the Zlib license, this is marked
+                in sdk/src/verifier/ed25519/MODIFICATIONS.
+
+                This directory is NOT covered by sdk/LICENSE.
+
+
+6. sdk/src/verifier/json11.cpp, sdk/include/verifier/json11.h
+--------------------------------------------------------------------------
+Component     : json11 — a tiny C++11 JSON library
+Upstream      : https://github.com/dropbox/json11
+Form          : Vendored copy, inherited from upstream Keystone
+License       : MIT
+License text  : In the file header of sdk/src/verifier/json11.cpp
+Copyright     : Copyright (c) 2013 Dropbox, Inc.
+
+Notes         : These files are NOT covered by sdk/LICENSE.
+
+
+7. sdk/include/app/sealing.h
+--------------------------------------------------------------------------
+Component     : Sealing key derivation definitions
+Author        : Fraunhofer AISEC — Benedikt Kopf, Lukas Auer,
+                Mathias Morbitzer
+Form          : Contributed to upstream Keystone; inherited with the fork
+License       : BSD-3-Clause (the file refers to the Keystone LICENSE)
+License text  : sdk/LICENSE
+Copyright     : Copyright (C) 2020 Fraunhofer AISEC
+
+
+8. runtime/crypto/aes.c, runtime/crypto/sha256.c
+--------------------------------------------------------------------------
+Component     : AES and SHA-256 implementations
+Author        : Brad Conte <brad@bradconte.com>
+Upstream      : https://github.com/B-Con/crypto-algorithms
+Form          : Vendored copy, inherited from upstream Keystone
+License       : Public domain. Upstream states: "This code is released into
+                the public domain free of any restrictions. The author
+                requests acknowledgement if the code is used, but does not
+                require it. This code is provided free of any liability and
+                without any quality claims by the author."
+
+Notes         : This notice is the acknowledgement requested by the author.
+                The file headers carry an empty "Copyright:" field; the
+                statement above was recovered from the upstream README.
+
+                Upstream cautions that these implementations are not
+                cryptographically secure and have no resistance to
+                side-channel attacks.
+
+                These files are NOT covered by runtime/LICENSE.
+
+
+9. runtime/test/cmocka/
+--------------------------------------------------------------------------
+Component     : cmocka — unit testing framework for C
+Upstream      : https://cmocka.org/
+Form          : Vendored source tree, used for host-side unit tests only.
+                Not linked into the Eyrie runtime.
+License       : Apache-2.0
+License text  : runtime/test/cmocka/COPYING
+Copyright     : Andreas Schneider; Google Inc.; University of New South Wales
+
+Notes         : Two files within this tree carry different licenses:
+
+                  runtime/test/cmocka/doc/that_style/LICENSE
+                      MIT, Copyright (c) 2017 Jan-Lukas Wynen
+                  runtime/test/cmocka/cmake/Modules/COPYING-CMAKE-SCRIPTS
+                      BSD-3-Clause, Copyright (c) 2006 Alexander Neundorf
+
+                This directory is NOT covered by runtime/LICENSE.
+
+
+10. ras/inject/
+--------------------------------------------------------------------------
+Component     : RERI error injection tool and test scripts
+Author        : Chungbuk National University, Computer Systems Lab
+License       : Apache-2.0
+License text  : https://www.apache.org/licenses/LICENSE-2.0
+Copyright     : Copyright (C) 2026 Chungbuk National University,
+                Computer Systems Lab
+
+Notes         : Original work of the riscv-vela project. Per-file
+                SPDX-License-Identifier tags are present and authoritative.
+                This directory is NOT covered by the top-level LICENSE.
+
+
+11. ras/rasdaemon/
+--------------------------------------------------------------------------
+Component     : rasdaemon packaging for a Vela guest — a RISC-V CPER decoder,
+                a build patch, and a systemd drop-in
+Upstream      : https://github.com/mchehab/rasdaemon
+Form          : Original work of the riscv-vela project, written to be built
+                into rasdaemon and therefore licensed to match it. No
+                rasdaemon source code is contained in this repository.
+License       : GPL-2.0-or-later for riscv-decoder/ and the systemd drop-in;
+                Apache-2.0 for install-rasdaemon.sh
+Copyright     : Copyright (C) 2026 Chungbuk National University,
+                Computer Systems Lab
+
+Notes         : riscv-decoder/ is compiled into the rasdaemon binary on the
+                guest and is licensed GPL-2.0-or-later for that reason. It
+                is built separately and is not linked into any other
+                component of this repository.
+
+                Per-file SPDX-License-Identifier tags are present and
+                authoritative. This directory is NOT covered by the
+                top-level LICENSE.
+
+
+12. reri register generator/
+--------------------------------------------------------------------------
+Component     : RERI register specification tool (Microsoft Excel workbook)
+Author        : Chungbuk National University, Computer Systems Lab
+License       : Apache-2.0
+License text  : https://www.apache.org/licenses/LICENSE-2.0
+Copyright     : Copyright (C) 2026 Chungbuk National University,
+                Computer Systems Lab
+
+Notes         : Original work of the riscv-vela project. The workbook is a
+                binary file and carries no in-file license tag; this notice
+                is the license statement for it.
+
+
+Reporting
+--------------------------------------------------------------------------
+If you believe a component is listed incorrectly, or a notice is missing,
+please open an issue at https://github.com/riscv-vela/vela-apps/issues

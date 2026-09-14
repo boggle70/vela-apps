@@ -11,3 +11,23 @@ include/linux/linkage.h -> linux/linkage.h
 Files containing modified linux bits:
 partial_linkage.h
 uaccess.h
+
+================================ LICENSE ================================
+
+The files listed above are taken from the Linux kernel and are licensed
+GPL-2.0-only. linux/const.h carries GPL-2.0 WITH Linux-syscall-note.
+
+uaccess.S is compiled into the rt_tmplib library and linked into the Eyrie
+runtime, and asm/csr.h is included by runtime/sys/ and runtime/loader-binary/.
+The effective license of a built Eyrie binary is therefore GPL-2.0-only, NOT
+the BSD-3-Clause of runtime/LICENSE.
+
+BSD-3-Clause is GPL-compatible, so the combination is permitted; what it is
+not is BSD-licensed. Anyone redistributing a built Eyrie binary must comply
+with GPL-2.0, including making the corresponding source available.
+
+This directory is NOT covered by runtime/LICENSE. See NOTICE section 4 at the
+top of the repository.
+
+This arrangement is inherited from upstream Keystone. It does not affect sdk/
+or examples/, which are separate programs and remain BSD-3-Clause.

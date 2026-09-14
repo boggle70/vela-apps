@@ -30,6 +30,37 @@ vela-apps/
 
 ---
 
+## License
+
+vela-apps is a composite work. `sdk/`, `runtime/` and `examples/` are a fork of
+the [Keystone Enclave](https://github.com/keystone-enclave/keystone) project and
+stay under its **BSD-3-Clause** license, which is also the default license for
+this repository (see [LICENSE](LICENSE)). Work contributed by the riscv-vela
+project is jointly owned by **ETRI** and **Chungbuk National University,
+Computer Systems Lab**.
+
+| Path | Origin | License |
+|------|--------|---------|
+| `sdk/`, `runtime/`, `examples/` | Keystone Enclave (UC Regents) | BSD-3-Clause |
+| `runtime/tmplib/` | Linux kernel | **GPL-2.0-only** |
+| `runtime/crypto/` | B-Con/crypto-algorithms | Public domain |
+| `runtime/test/cmocka/` | cmocka | Apache-2.0 |
+| `sdk/src/verifier/ed25519/` | orlp/ed25519 | Zlib |
+| `sdk/src/verifier/json11.cpp` | dropbox/json11 | MIT |
+| `ras/inject/` | riscv-vela (CBNU) | Apache-2.0 |
+| `ras/rasdaemon/` | riscv-vela (CBNU), built into rasdaemon | GPL-2.0-or-later |
+| `reri register generator/` | riscv-vela (CBNU) | Apache-2.0 |
+
+> **Note.** `runtime/tmplib/` is Linux kernel code under GPL-2.0 and is linked
+> into the Eyrie runtime, so a **built Eyrie binary is effectively GPL-2.0-only**,
+> not BSD-3-Clause. `sdk/` and `examples/` are separate programs and are
+> unaffected. See NOTICE section 4.
+
+See [NOTICE](NOTICE) for the full component notices. Per-file
+`SPDX-License-Identifier` tags, where present, take precedence.
+
+---
+
 ## TEE — Building the Keystone Applications
 
 ### Prerequisites

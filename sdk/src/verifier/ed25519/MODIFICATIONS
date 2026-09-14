@@ -1,0 +1,21 @@
+This is an ALTERED version of the ed25519 library by Orson Peters.
+It is not the original software. See license.txt, clause 2.
+
+Upstream: https://github.com/orlp/ed25519
+
+Changes from upstream, made by the Keystone Enclave project and inherited by
+the riscv-vela project:
+
+  * The hash function was changed from SHA-512 to SHA-3 (Keccak). The
+    signatures produced by this version are therefore NOT interoperable
+    with upstream ed25519 or with RFC 8032 Ed25519.
+      - sha512.h / sha512_* calls replaced with common/sha3.h and sha3_*
+      - affects sign.c, verify.c, keypair.c
+  * Include paths were rewritten to be relative to the SDK include root
+    (e.g. "ge.h" -> "ed25519/ge.h").
+  * The sources were reformatted to the Keystone code style. Most of the
+    line-level difference against upstream is reformatting only.
+  * The random seed generation (seed.c) and SHA-512 sources from upstream
+    are not vendored here.
+
+The upstream license (Zlib) continues to apply to this code; see license.txt.
