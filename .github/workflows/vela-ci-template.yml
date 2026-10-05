@@ -1,0 +1,154 @@
+# vela-ci-template.yml — riscv-vela 공통 CI 템플릿 (FALINUX 관리 영역, 레포 작업자는 수정하지 않는다)
+#
+# 호출 방식: on.workflow_call. 레포별 차이는 inputs 로만 받는다.
+#
+# 단계 (한 job 안에서 순서대로 실행, 앞 단계가 실패하면 뒤 단계는 실행하지 않는다)
+#   1. 준비      : 레포 checkout → apt-packages 설치 → setup-script 실행
+#   2. 정적분석  : static-analysis-script 실행
+#   3. 단위시험  : unit-test-script 실행
+#   4. 교차빌드  : riscv-toolchain 준비 → cross-build-script 실행
+#   5. 결과 요약 : 각 단계 결과를 GITHUB_STEP_SUMMARY 에 표로 남긴다 (앞 단계 실패와 무관하게 항상 실행)
+#   스크립트 입력이 빈 문자열이면 그 단계는 건너뛴다(요약에 "미설정"으로 표시).
+#   스크립트는 레포 루트에서 `bash <경로>` 로 실행한다. 로컬에서도 같은 명령으로 검증할 수 있어야 한다.
+#
+# 제공 방식 전환 (이 파일 내용은 그대로 두고 호출 파일의 uses 한 줄만 바꾼다)
+#   복사형 : 각 레포 .github/workflows/ 에 이 파일을 두고 uses: ./.github/workflows/vela-ci-template.yml
+#   호출형 : 중앙 레포에 두고 uses: riscv-vela/<중앙레포>/.github/workflows/vela-ci-template.yml@<tag>
+#   호출형이어도 github context 는 호출한 레포 것이므로 checkout 은 호출한 레포를 받는다.
+#
+# 런너: ubuntu-24.04 (x64). CMake 3.31, gcc/g++ 13, clang-format 18, shellcheck 0.9 포함, RISC-V 툴체인 없음.
+#   근거: https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md
+
+name: vela-ci-template
+
+on:
+  workflow_call:
+    inputs:
+      apt-packages:
+        description: '준비 단계에서 apt 로 추가 설치할 패키지 (공백 구분). 빈 값이면 설치하지 않는다.'
+        type: string
+        default: ''
+      setup-script:
+        description: '준비 단계 스크립트 경로 (레포 루트 기준). 빈 값이면 건너뛴다.'
+        type: string
+        default: ''
+      static-analysis-script:
+        description: '정적분석 스크립트 경로. 빈 값이면 건너뛴다.'
+        type: string
+        default: ''
+      unit-test-script:
+        description: '단위시험 스크립트 경로. 빈 값이면 건너뛴다.'
+        type: string
+        default: ''
+      cross-build-script:
+        description: '교차빌드 스크립트 경로. 빈 값이면 건너뛴다.'
+        type: string
+        default: ''
+      riscv-toolchain:
+        description: 'RISC-V 툴체인 확보 방식. 빈 값이면 준비하지 않는다. 확보 방식은 결정 전이라 현재 다른 값은 오류로 처리한다.'
+        type: string
+        default: ''
+      timeout-minutes:
+        description: 'job 제한 시간(분)'
+        type: number
+        default: 30
+
+jobs:
+  ci:
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    env:
+      APT_PACKAGES: ${{ inputs.apt-packages }}
+      SETUP_SCRIPT: ${{ inputs.setup-script }}
+      STATIC_SCRIPT: ${{ inputs.static-analysis-script }}
+      UNIT_SCRIPT: ${{ inputs.unit-test-script }}
+      CROSS_SCRIPT: ${{ inputs.cross-build-script }}
+      RISCV_TOOLCHAIN: ${{ inputs.riscv-toolchain }}
+    steps:
+      # 1. 준비
+      - name: checkout
+        id: checkout
+        uses: actions/checkout@v7
+
+      - name: apt 패키지 설치
+        id: apt
+        if: inputs.apt-packages != ''
+        run: |
+          sudo apt-get update
+          # shellcheck disable=SC2086 # 공백 구분 목록을 인자로 나눈다
+          sudo apt-get install -y --no-install-recommends $APT_PACKAGES
+
+      - name: 준비 스크립트
+        id: setup
+        if: inputs.setup-script != ''
+        run: bash "$SETUP_SCRIPT"
+
+      # 2. 정적분석
+      - name: 정적분석
+        id: static
+        if: inputs.static-analysis-script != ''
+        run: bash "$STATIC_SCRIPT"
+
+      # 3. 단위시험
+      - name: 단위시험
+        id: unit
+        if: inputs.unit-test-script != ''
+        run: bash "$UNIT_SCRIPT"
+
+      # 4. 교차빌드
+      - name: RISC-V 툴체인 준비
+        id: toolchain
+        if: inputs.riscv-toolchain != ''
+        run: |
+          echo "::error::riscv-toolchain='$RISCV_TOOLCHAIN' 은 아직 지원하지 않는다. 툴체인 확보 방식이 정해지면 이 단계에 추가한다."
+          exit 1
+
+      - name: 교차빌드
+        id: cross
+        if: inputs.cross-build-script != ''
+        run: bash "$CROSS_SCRIPT"
+
+      # 5. 결과 요약
+      - name: 결과 요약
+        if: always()
+        env:
+          O_CHECKOUT: ${{ steps.checkout.outcome }}
+          O_APT: ${{ steps.apt.outcome }}
+          O_SETUP: ${{ steps.setup.outcome }}
+          O_STATIC: ${{ steps.static.outcome }}
+          O_UNIT: ${{ steps.unit.outcome }}
+          O_TOOLCHAIN: ${{ steps.toolchain.outcome }}
+          O_CROSS: ${{ steps.cross.outcome }}
+        run: |
+          # $1 단계 이름, $2 입력값(빈 값이면 미설정), $3 step outcome
+          row() {
+            local result
+            if [ -z "$2" ]; then
+              result="⏭️ 미설정 (건너뜀)"
+            else
+              case "$3" in
+                success) result="✅ 성공" ;;
+                failure) result="❌ 실패" ;;
+                cancelled) result="⛔ 취소" ;;
+                *) result="⏸️ 실행 안 됨 (앞 단계 실패)" ;;
+              esac
+            fi
+            echo "| $1 | ${2:--} | $result |"
+          }
+          {
+            echo "## vela CI 결과"
+            echo
+            echo "| 단계 | 설정 | 결과 |"
+            echo "|---|---|---|"
+            row "준비: checkout" "actions/checkout" "$O_CHECKOUT"
+            row "준비: apt 패키지" "$APT_PACKAGES" "$O_APT"
+            row "준비: 스크립트" "$SETUP_SCRIPT" "$O_SETUP"
+            row "정적분석" "$STATIC_SCRIPT" "$O_STATIC"
+            row "단위시험" "$UNIT_SCRIPT" "$O_UNIT"
+            row "교차빌드: 툴체인" "$RISCV_TOOLCHAIN" "$O_TOOLCHAIN"
+            row "교차빌드" "$CROSS_SCRIPT" "$O_CROSS"
+            echo
+            echo "runner: \`$ImageOS\` image \`$ImageVersion\`, commit \`$GITHUB_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
